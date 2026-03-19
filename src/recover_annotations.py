@@ -127,6 +127,9 @@ def generate_output_vcf_file(predictions, rna_annotations, vcf_path):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+## In the future, this code should be factored out from recover_annotations.py and 
+## classify_with_scaling.py
+
 def get_zero_score_names(models):
     # Accesory function to identify non-contributory features across multiple EBM models
     # These features need to be removed to make models compatible for merging 
@@ -167,30 +170,54 @@ def predict(extracted_features_paths, outpath, model_file, rna_path=None, sample
     try:
         if isinstance(model_file, list):
             models = []
-            for file in model_file:
-                ebm = ExplainableBoostingClassifier()
-                with open(file, 'rb') as f:
-                    ebm = pickle.load(f)
-                models.append(ebm)
+            for i, model_path in enumerate(model_file.split(',')):
+                fifa_install_dir=os.path.dirname(os.getcwd())
+                if model_path == "NYGC1":
+                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC1.pkl')
+                    with open(path, 'rb') as file:
+                        model = pickle.load(file)
+                    models.append(model)
+                elif model_path == "NYGC2":
+                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC2.pkl')
+                    with open(path, 'rb') as file:
+                        model = pickle.load(file)
+                    models.append(model)
+                elif re.match(r'^(?:CGCI-)?BLGSP$', model_path):
+                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-BLGSP.pkl')
+                    with open(path, 'rb') as file:
+                        model = pickle.load(file)
+                    models.append(model)
+                elif re.match(r'^(?:CGCI-)?HTMCP$', model_path):
+                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-HTMCP.pkl')
+                    with open(path, 'rb') as file:
+                        model = pickle.load(file)
+                    models.append(model)
+                elif not os.path.isfile(model_path):
+                    raise FileNotFoundError(f"Model file {model_path} does not exist.")
+                else:
+                    model = pickle.load(open(model_path, 'rb'))
+                    models.append(model)
+            
+            if models.is_empty():
+                raise ValueError("No models were loaded. Please check the input model paths.")
 
             zero_score_names = get_zero_score_names(models)
-            for i, model in enumerate(models):
-                    models[i] = remove_zero_score_terms_by_name(model, zero_score_names)
-            ebm1 = models[0]
-            for model in models[1:]:
-                model_feature_index = {name: i for i, name in enumerate(model.feature_names_in_)}
-                reorder_indices = [model_feature_index[name] for name in ebm1.feature_names_in_]
-                
-                model.feature_names_in_ = [model.feature_names_in_[i] for i in reorder_indices]
-                model.term_names_ = [model.term_names_[i] for i in reorder_indices]
-                model.feature_types_in_ = [model.feature_types_in_[i] for i in reorder_indices]
-            
-            ebm =  merge_ebms(models)
 
+            if len(models) > 1:
+                for model in models:
+                    model = remove_zero_score_terms_by_name(model, zero_score_names)
+                    model_feature_index = {name: i for i, name in enumerate(model.feature_names_in_)}
+                    reorder_indices = [model_feature_index[name] for name in models[0].feature_names_in_]
+                    model.feature_names_in_ = [model.feature_names_in_[i] for i in reorder_indices]
+                    model.term_names_ = [model.term_names_[i] for i in reorder_indices]
+                    model.feature_types_in_ = [model.feature_types_in_[i] for i in reorder_indices] 
+
+                ebm =  merge_ebms(models)
         elif os.path.isfile(model_file):
             ebm = ExplainableBoostingClassifier()
             with open(model_file, 'rb') as f:
                 ebm = pickle.load(f)
+        
             
     except Exception as e:
         print(f"An error occurred: {e}")
