@@ -1,4 +1,4 @@
-#!/bin/env python
+#!/usr/bin/env python
 
 import os 
 import logging
@@ -26,13 +26,20 @@ if __name__ == '__main__':
 
     ## Extract features from BAM/VCF files for making predictions or retraining
     feature_parser = subparsers.add_parser('extract', help='Extract features from VCF/BAM files for making predictions or retraining')
-    feature_parser.add_argument('-s', '--sample', nargs=5, required=True, 
-                            help='Sample Name, Cohort, vcf_file path, bam_file path, ref_seq \nFor submitting individual sample for processing.')
+    feature_parser.add_argument('-s', '--sample', nargs=1, required=True, 
+                            help='Name of sample being submitted to be processed.')
+    feature_parser.add_argument('-v', '--vcffile', nargs=1, required=True, 
+                            help='Path to sample\'s VCF file, with variants to extract features for.')
+    feature_parser.add_argument('-b', '--bamfile', nargs=1, required=True, 
+                            help='Path to sample\'s BAM file, with reads to extract features for.')
+    feature_parser.add_argument('-r', '--refseq', nargs=1, required=True, 
+                            help='Path to reference file used for alignment of the sample\'s BAM file.')
+    feature_parser.add_argument('-c', '--cohort', nargs=1, default='NA', 
+                            help='Sample\'s Cohort')
     feature_parser.add_argument('-n', '--num_threads', default=2, type=int,
                                 help='Number of threads allocated')            
     feature_parser.add_argument('-o', '--output_path', default=os.getcwd(),
                                 help='Path to save output files with variants and all extracted features. (default: current directory)')
-    
     feature_parser.add_argument('-l', '--label', nargs=2, default=[None,None],
                                 help='VCF INFO Field with Variant Label and Real/Truth/1 Label. (default: None, None)')
     
@@ -62,8 +69,10 @@ if __name__ == '__main__':
     
     ## Make predictions on new samples
     predict_parser = subparsers.add_parser('predict', help='Create predictions on labeled or unlabeled data')
-    predict_parser.add_argument('-s', '--sample', nargs=2,
-                            help='Sample Name and vcf_file path\nFor submitting individual sample for processing.')
+    predict_parser.add_argument('-s', '--sample', nargs=1,
+                            help='Sample Name \nFor submitting individual sample for processing.')
+    predict_parser.add_argument('-v', '--vcffile', nargs=1,
+                            help='Path to sample\'s VCF file, with variants to classify.')
     predict_parser.add_argument('-f', '--features_path', nargs='+', 
                                     help='Paths to CSV files with features for each variant', required=True)
     predict_parser.add_argument('-o', '--output_dir', default=os.getcwd(), 
@@ -79,14 +88,13 @@ if __name__ == '__main__':
     if args.subcommand == 'extract':
         try:
             logger.info('Extracting features from BAM/VCF files')
-            sample, cohort, vcf, bam, ref = args.sample
             if args.original_parallel:
                 logger.info('Using original parallelization scheme. Less efficient than latest version (omit -p flag)')
-                regular_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=sample, cohort=cohort, 
-                vcf_file=vcf, bam_file=bam, ref_seq=ref)
+                regular_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
+                vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
             else:
-                parallel_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=sample, cohort=cohort, 
-                vcf_file=vcf, bam_file=bam, ref_seq=ref)
+                parallel_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
+                vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
         except Exception as e:
             logger.error(f"An error occurred: {e}")
 
@@ -105,20 +113,19 @@ if __name__ == '__main__':
                 model_file = list(args.model_files)
             else:
                 model_file = args.model_files
-            sample, vcf_file = args.sample
             if(args.rna_annotations):
                 logger.info('Will include RNA annotations (for rescuing FN predictions)')
                 predict_with_rna(extracted_features_paths=list(args.features_path), outpath=args.output_dir, model_file=model_file, 
-                sample=sample, vcf_path=vcf_file, rna_path=args.rna_annotations)   
+                sample=args.sample, vcf_path=args.vcffile, rna_path=args.rna_annotations)   
             else:
                 predict(extracted_features_paths=list(args.features_path), outpath=args.output_dir, model_file=model_file, 
-                sample=sample, vcf_path=vcf_file)   
+                sample=args.sample, vcf_path=args.vcffile)   
         except Exception as e:
             logger.error(f"An error occurred: {e}")
     
     elif args.subcommand == 'merge':
         logger.info('Merging multiple EBM models')
-        merge_ebms(args.input_models, args.output_path, output_pdfs=None)
+        merge_ebms(args.input_models, args.output_path)
         pass
     else:
         logger.error('Please choose proper function.')
