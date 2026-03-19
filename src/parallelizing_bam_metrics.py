@@ -1,7 +1,8 @@
-#!/bin/env python
+#!/usr/bin/env python
 
 ##########################################################################
-#	Attempting to follow André's paralelization scheme 
+#    USAGE: Extract features from BAM file for a set of variants in a VCF file,
+#    with most-up-to-date paralellization scheme
 ##########################################################################
 
 ################################################################################
@@ -24,34 +25,8 @@ import time
 import logging
 from metrics_dictionary import MetricsDictionary
 from metrics_dictionary import safe_median
+
 ################################################################### /MODULES ###
-################################################################################
-
-################################################################################
-### GENERAL NOTES ##############################################################
-################################################################################
-
-## run mobster up front, have that dictionary avaible 
-## read vcf line by line, then pass those records into queue (can be seen by all processes),
-## open a bunch of processes where each one pops from the queue and processes that record
-## might need to specify a max size for the queue 
-
-## do the two things (pileups), then start the writing (with lock - aquire, write, then release lock)
-## do at once the window + 
-## write to a shared object ("master dictionary"), then merge with mobster scores 
-
-## check if mobster retains input order – if so could just use the position as an index 
-
-## add nones to all processes after reading vcf so that each process collects none object and FINISHES.
-## dump lines to print 
-
-## hold things and write chunk all at once vs. dump out string for each variant 
-
-## default chunk size, but also give it as an option 
-## Make an object class for the metrics to make this cleaner
-
-## Maybe check with Will if all features are necessary since they're adding computational cost
-
 ################################################################################
 
 global logger
@@ -354,7 +329,7 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
                         is_ref = base == ref
                         is_var = base == alt
 
-                        ## Check if this can be removed
+                        
                         if is_read_filtered(read):
                             metrics.increment_metric('tumor_reads_filtered')
 
@@ -412,9 +387,6 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
 
             metrics.update_coverage_ratios(left=left_window_median_cov, right=right_window_median_cov)
 
-            ## this should be done with pysamstats I think
-            ## Makes more sense to combine above calculation with this 
-
             fractions = get_read_fractions(bamfile, chrom, left, right)
             metrics.set_metric('window_median_frag_len', fractions[0])
             metrics.set_metric('window_dup_frac', fractions[1])
@@ -436,8 +408,6 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
             final_dictionary[variant_id] = {}
             iolock.release()
             continue
-
-        ## Do I still need this lock then ? 
 
         iolock.acquire()
         final_dictionary[variant_id] = metrics.get_all_metrics()
@@ -469,12 +439,19 @@ def read_vcf(sample, label, vcf_path, queue, num_threads):
 def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
     outfile = os.path.join(os.path.basename(out_path), f'{sample}_mobster.csv')
 
-    subprocess.run(
+    process = subprocess.run(
         ['Rscript', 'run_mobster.R', sample, vcf_path, outfile],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
         )
+    
+    for line in process.stdout:
+        logger.info(f"[MOBSTER stdout] {line.strip()}")
+    for line in process.stderr:
+        logger.error(f"[MOBSTER error] {line.strip()}")
 
+    process.wait()
+    
     if not os.path.isfile(outfile):
         logger.info(f"MOBSTER did not run succesfully on {sample}")
     else:    
@@ -547,7 +524,6 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
 ### PROCESS INPUT FILES #########################################################
     
 def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, label, num_threads): 
-    ## Should clean up these error messages... tampoco la pavada
     try:
         if os.path.isfile(vcf_path) and os.path.isfile(bam_path) and os.path.isfile(ref_seq):
             logger.info(f'Processing BAM file for sample: {sample}')
@@ -567,9 +543,10 @@ def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, lab
         traceback.print_exc()
 
 def process_bam_file(outpath, label, num_threads, sample, vcf_file, 
-bam_file, cohort=None, ref_seq=None):
+bam_file, ref_seq, cohort=None):
     global logger
     logger = logging.getLogger(__name__)
+    
     try:
         if os.path.isfile(outpath):
             output_file = outpath 

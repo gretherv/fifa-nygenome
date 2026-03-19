@@ -47,7 +47,8 @@ fit <- vcf_data %>%
     trace = FALSE,
     parallel = FALSE,
     pi_cutoff = 0.02,
-    N_cutoff = 10
+    N_cutoff = 10,
+    silent=FALSE
 )
 
 sample_data <- vcf_data %>%
