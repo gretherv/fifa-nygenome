@@ -7,6 +7,7 @@ channels:
   - conda-forge
   - bioconda
   - defaults
+  - r
 
 dependencies:
   - python=3.12
@@ -21,6 +22,7 @@ dependencies:
   - biopython
 
   - r-base=4.4
+  - r-devtools
   - bioconductor-biostrings
   - bioconductor-genomicranges
   - bioconductor-rsamtools
