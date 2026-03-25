@@ -15,7 +15,7 @@ Install MOBSTER for R
 > devtools::install_github("caravagnalab/mobster")
 ```
 
-###
+## USAGE
 To access the help manual, run:
 
 ```bash
